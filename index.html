@@ -78,6 +78,13 @@
     width: 100%;
   }
   button:hover { opacity: 0.9; }
+  button.secondary {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    margin-top: 0.5rem;
+  }
+  button.secondary:hover { color: var(--text); border-color: var(--muted); opacity: 1; }
   table {
     width: 100%;
     border-collapse: collapse;
@@ -146,6 +153,7 @@
   </div>
 
   <button id="calcBtn">Calcola piano gara</button>
+  <button id="resetBtn" class="secondary">Reset ai valori di default</button>
 
   <div class="card" id="resultCard" style="display:none; margin-top:1rem;">
     <h2>Piano gara</h2>
@@ -387,6 +395,12 @@ function calculate() {
 buildStationInputs();
 loadSaved();
 document.getElementById("calcBtn").addEventListener("click", calculate);
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if (confirm("Cancellare tutti i tempi salvati e tornare ai default?")) {
+    localStorage.removeItem(LS_KEY);
+    location.reload();
+  }
+});
 </script>
 </body>
 </html>
