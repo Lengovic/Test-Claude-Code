@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hyrox Pace Planner</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1419;
+    --card: #1a2027;
+    --border: #2a323d;
+    --text: #e6e6e6;
+    --muted: #8a95a5;
+    --accent: #4ade80;
+    --warn: #f87171;
+    --target: #60a5fa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    padding: 1rem;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+  h1 { margin: 0 0 0.25rem; font-size: 1.6rem; }
+  .subtitle { color: var(--muted); margin: 0 0 1.5rem; font-size: 0.9rem; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  .card h2 { margin: 0 0 0.75rem; font-size: 1.05rem; color: var(--accent); }
+  label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 0.25rem;
+  }
+  input[type="text"] {
+    width: 100%;
+    padding: 0.5rem 0.6rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.95rem;
+  }
+  input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.75rem;
+  }
+  .row-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+  button {
+    background: var(--accent);
+    color: #0f1419;
+    border: none;
+    padding: 0.7rem 1.2rem;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    width: 100%;
+  }
+  button:hover { opacity: 0.9; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem 0.4rem;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--muted); font-weight: 500; font-size: 0.8rem; text-transform: uppercase; }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; }
+  .station-row td { background: rgba(74, 222, 128, 0.05); }
+  .transition-row td { color: var(--muted); font-size: 0.82rem; font-style: italic; }
+  .total-row td { font-weight: 600; border-top: 2px solid var(--border); border-bottom: none; padding-top: 0.75rem; }
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .summary-item {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.6rem 0.7rem;
+  }
+  .summary-item .lbl { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; }
+  .summary-item .val { font-size: 1.15rem; font-weight: 600; margin-top: 0.15rem; font-variant-numeric: tabular-nums; }
+  .delta-pos { color: var(--warn); }
+  .delta-neg { color: var(--accent); }
+  .chart-wrap { position: relative; height: 320px; }
+  @media (max-width: 600px) {
+    h1 { font-size: 1.3rem; }
+    .chart-wrap { height: 260px; }
+    th, td { padding: 0.4rem 0.25rem; font-size: 0.82rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Hyrox Pace Planner</h1>
+  <p class="subtitle">Pianifica il pacing gara stazione per stazione</p>
+
+  <div class="card">
+    <h2>Target & running</h2>
+    <div class="grid">
+      <div>
+        <label for="target">Tempo target gara (mm:ss)</label>
+        <input type="text" id="target" value="80:00" inputmode="numeric">
+      </div>
+      <div>
+        <label for="runPace">Pace medio per km running (mm:ss)</label>
+        <input type="text" id="runPace" value="4:50" inputmode="numeric">
+      </div>
+      <div>
+        <label for="transition">Transizione media per passaggio (mm:ss) — 16 passaggi tot.</label>
+        <input type="text" id="transition" value="0:20" inputmode="numeric">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Tempi stazioni (mm:ss)</h2>
+    <div class="grid" id="stationsGrid"></div>
+  </div>
+
+  <button id="calcBtn">Calcola piano gara</button>
+
+  <div class="card" id="resultCard" style="display:none; margin-top:1rem;">
+    <h2>Piano gara</h2>
+    <div class="summary" id="summary"></div>
+    <table id="planTable">
+      <thead>
+        <tr>
+          <th>Segmento</th>
+          <th class="num">Durata</th>
+          <th class="num">Cumul.</th>
+          <th class="num">vs Target</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card" id="chartCard" style="display:none;">
+    <h2>Curva tempo cumulativo</h2>
+    <div class="chart-wrap"><canvas id="chart"></canvas></div>
+  </div>
+</div>
+
+<script>
+const STATIONS = [
+  { key: "skierg",   name: "SkiErg 1000m",       def: "4:30" },
+  { key: "sledpush", name: "Sled Push 50m",      def: "2:30" },
+  { key: "sledpull", name: "Sled Pull 50m",      def: "3:00" },
+  { key: "burpees",  name: "Burpee Broad Jumps 80m", def: "4:00" },
+  { key: "row",      name: "Rowing 1000m",       def: "3:50" },
+  { key: "farmers",  name: "Farmers Carry 200m", def: "1:50" },
+  { key: "lunges",   name: "Sandbag Lunges 100m", def: "4:00" },
+  { key: "wallballs", name: "Wall Balls 100 reps", def: "5:00" }
+];
+
+const LS_KEY = "hyroxPlannerV1";
+
+function parseMMSS(s) {
+  if (!s) return null;
+  const m = String(s).trim().match(/^(\d+):(\d{1,2})$/);
+  if (!m) return null;
+  const min = parseInt(m[1], 10);
+  const sec = parseInt(m[2], 10);
+  if (sec >= 60) return null;
+  return min * 60 + sec;
+}
+
+function fmt(sec) {
+  if (sec == null || isNaN(sec)) return "—";
+  const sign = sec < 0 ? "-" : "";
+  sec = Math.abs(Math.round(sec));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) return `${sign}${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  return `${sign}${m}:${String(s).padStart(2,"0")}`;
+}
+
+function fmtDelta(sec) {
+  if (sec == null) return "—";
+  const sign = sec > 0 ? "+" : "";
+  return sign + fmt(sec);
+}
+
+function buildStationInputs() {
+  const grid = document.getElementById("stationsGrid");
+  grid.innerHTML = "";
+  STATIONS.forEach(st => {
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `
+      <label for="st_${st.key}">${st.name}</label>
+      <input type="text" id="st_${st.key}" value="${st.def}" inputmode="numeric">
+    `;
+    grid.appendChild(wrap);
+  });
+}
+
+function loadSaved() {
+  try {
+    const data = JSON.parse(localStorage.getItem(LS_KEY));
+    if (!data) return;
+    if (data.target) document.getElementById("target").value = data.target;
+    if (data.runPace) document.getElementById("runPace").value = data.runPace;
+    if (data.transition) document.getElementById("transition").value = data.transition;
+    STATIONS.forEach(st => {
+      if (data.stations && data.stations[st.key]) {
+        document.getElementById("st_" + st.key).value = data.stations[st.key];
+      }
+    });
+  } catch(e) { /* ignore */ }
+}
+
+function saveState() {
+  const stations = {};
+  STATIONS.forEach(st => {
+    stations[st.key] = document.getElementById("st_" + st.key).value;
+  });
+  localStorage.setItem(LS_KEY, JSON.stringify({
+    target: document.getElementById("target").value,
+    runPace: document.getElementById("runPace").value,
+    transition: document.getElementById("transition").value,
+    stations
+  }));
+}
+
+let chartInstance = null;
+
+function calculate() {
+  const targetSec = parseMMSS(document.getElementById("target").value);
+  const paceSec = parseMMSS(document.getElementById("runPace").value);
+  const transSec = parseMMSS(document.getElementById("transition").value);
+  if (targetSec == null) { alert("Tempo target non valido (usa mm:ss)"); return; }
+  if (paceSec == null)   { alert("Pace running non valido (usa mm:ss)"); return; }
+  if (transSec == null)  { alert("Tempo transizione non valido (usa mm:ss)"); return; }
+
+  const stTimes = STATIONS.map(st => {
+    const v = parseMMSS(document.getElementById("st_" + st.key).value);
+    return { ...st, sec: v };
+  });
+  if (stTimes.some(s => s.sec == null)) {
+    alert("Una o più stazioni hanno tempi non validi");
+    return;
+  }
+
+  saveState();
+
+  // Hyrox flow: run → t_in → station → t_out, ripetuto per 8 stazioni (16 transizioni totali)
+  const segments = [];
+  let cumul = 0;
+  let totalRun = 0, totalStation = 0, totalTrans = 0;
+  for (let i = 0; i < 8; i++) {
+    cumul += paceSec; totalRun += paceSec;
+    segments.push({ label: `Run ${i+1} (1 km)`, duration: paceSec, cumul, type: "run" });
+
+    cumul += transSec; totalTrans += transSec;
+    segments.push({ label: `→ Transizione (entrata)`, duration: transSec, cumul, type: "transition" });
+
+    cumul += stTimes[i].sec; totalStation += stTimes[i].sec;
+    segments.push({ label: stTimes[i].name, duration: stTimes[i].sec, cumul, type: "station" });
+
+    cumul += transSec; totalTrans += transSec;
+    segments.push({ label: `→ Transizione (uscita)`, duration: transSec, cumul, type: "transition" });
+  }
+  const totalSec = cumul;
+  const delta = totalSec - targetSec;
+
+  // Summary cards
+  const summary = document.getElementById("summary");
+  summary.innerHTML = `
+    <div class="summary-item"><div class="lbl">Totale stimato</div><div class="val">${fmt(totalSec)}</div></div>
+    <div class="summary-item"><div class="lbl">vs Target</div><div class="val ${delta > 0 ? "delta-pos" : "delta-neg"}">${fmtDelta(delta)}</div></div>
+    <div class="summary-item"><div class="lbl">Running (8 km)</div><div class="val">${fmt(totalRun)}</div></div>
+    <div class="summary-item"><div class="lbl">Stazioni</div><div class="val">${fmt(totalStation)}</div></div>
+    <div class="summary-item"><div class="lbl">Roxzone (16 trans.)</div><div class="val">${fmt(totalTrans)}</div></div>
+  `;
+
+  // Render table
+  const tbody = document.querySelector("#planTable tbody");
+  tbody.innerHTML = "";
+  const perSegTarget = targetSec / segments.length;
+  segments.forEach((seg, i) => {
+    const targetAt = perSegTarget * (i + 1);
+    const d = seg.cumul - targetAt;
+    const tr = document.createElement("tr");
+    if (seg.type === "station") tr.className = "station-row";
+    else if (seg.type === "transition") tr.className = "transition-row";
+    tr.innerHTML = `
+      <td>${seg.label}</td>
+      <td class="num">${fmt(seg.duration)}</td>
+      <td class="num">${fmt(seg.cumul)}</td>
+      <td class="num ${d > 0 ? "delta-pos" : "delta-neg"}">${fmtDelta(d)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const trTotal = document.createElement("tr");
+  trTotal.className = "total-row";
+  trTotal.innerHTML = `
+    <td>TOTALE</td>
+    <td class="num">${fmt(totalSec)}</td>
+    <td class="num">${fmt(totalSec)}</td>
+    <td class="num ${delta > 0 ? "delta-pos" : "delta-neg"}">${fmtDelta(delta)}</td>
+  `;
+  tbody.appendChild(trTotal);
+
+  document.getElementById("resultCard").style.display = "";
+  document.getElementById("chartCard").style.display = "";
+
+  // Render chart
+  const labels = ["Start", ...segments.map(s => s.label)];
+  const cumulSeries = [0, ...segments.map(s => s.cumul / 60)]; // minuti
+  const targetSeries = labels.map((_, i) => (targetSec * i / segments.length) / 60);
+
+  if (chartInstance) chartInstance.destroy();
+  const ctx = document.getElementById("chart").getContext("2d");
+  chartInstance = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Tempo cumulativo (min)",
+          data: cumulSeries,
+          borderColor: "#4ade80",
+          backgroundColor: "rgba(74,222,128,0.15)",
+          tension: 0.2,
+          pointRadius: 3,
+          fill: true
+        },
+        {
+          label: "Target lineare",
+          data: targetSeries,
+          borderColor: "#60a5fa",
+          borderDash: [6, 4],
+          pointRadius: 0,
+          fill: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: "#e6e6e6" } },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)} min`
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: "#8a95a5", maxRotation: 60, minRotation: 45, font: { size: 9 } }, grid: { color: "#2a323d" } },
+        y: { ticks: { color: "#8a95a5" }, grid: { color: "#2a323d" }, title: { display: true, text: "minuti", color: "#8a95a5" } }
+      }
+    }
+  });
+}
+
+buildStationInputs();
+loadSaved();
+document.getElementById("calcBtn").addEventListener("click", calculate);
+</script>
+</body>
+</html>

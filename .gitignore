@@ -1,0 +1,11 @@
+# Claude Code / VS Code local state
+.claude/
+
+# OS junk
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Editor swap files
+*.swp
+*~
